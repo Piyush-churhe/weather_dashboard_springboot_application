@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="'Detailed Forecast - ' + ${currentCity} + ' - Weather Dashboard'">Detailed Forecast - Weather Dashboard</title>
+    <!-- Bootstrap CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom CSS -->
+    <style>
+        .hero-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .weather-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        .weather-card:hover {
+            transform: translateY(-2px);
+        }
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        }
+
+        .hourly-forecast-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .hourly-item {
+            text-align: center;
+            padding: 20px 15px;
+            border-radius: 15px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            border: 2px solid rgba(102, 126, 234, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .hourly-item:hover {
+            transform: translateY(-5px);
+            border-color: #667eea;
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .forecast-chart {
+            height: 300px;
+        }
+
+        .alert-custom {
+            border-radius: 15px;
+            border: none;
+            margin-bottom: 15px;
+        }
+
+        .alert-warning-custom {
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+            color: white;
+        }
+
+        .alert-danger-custom {
+            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+            color: white;
+        }
+
+        .alert-info-custom {
+            background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+            color: white;
+        }
+
+        .weather-metric {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .current-weather-summary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+
+        .temperature-display {
+            font-size: 5rem;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body class="bg-light">
+
+<!-- Navigation -->
+<nav class="navbar navbar-expand-lg navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand fw-bold" href="/dashboard">
+            <i class="fas fa-cloud-sun me-2"></i>Weather Dashboard
+        </a>
+
+        <div class="navbar-nav me-auto">
+            <a class="nav-link" href="/dashboard">
+                <i class="fas fa-home me-1"></i>Dashboard
+            </a>
+            <a class="nav-link active" href="#">
+                <i class="fas fa-chart-line me-1"></i>Detailed Forecast
+            </a>
+        </div>
+
+        <div class="dropdown">
+            <a class="nav-link dropdown-toggle text-white text-decoration-none" href="#" role="button" data-bs-toggle="dropdown">
+                <i class="fas fa-user-circle me-2"></i>
+                <span th:text="${user != null ? user.username : 'User'}">User</span>
+            </a>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="/dashboard/profile">
+                    <i class="fas fa-cog me-2"></i>Profile Settings
+                </a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <form th:action="@{/logout}" method="post" class="d-inline">
+                        <button type="submit" class="dropdown-item">
+                            <i class="fas fa-sign-out-alt me-2"></i>Logout
+                        </button>
+                    </form>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<!-- Main Content -->
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="display-6 text-primary mb-2">
+                        <i class="fas fa-chart-line me-3"></i>Detailed Forecast
+                    </h1>
+                    <p class="lead text-muted mb-0">
+                        Comprehensive weather forecast for <span th:text="${currentCity}" class="fw-bold">City</span>
+                    </p>
+                </div>
+                <div>
+                    <a th:href="@{'/dashboard/weather/' + ${currentCity}}" class="btn btn-outline-primary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Summary
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Current Weather Summary -->
+    <div th:if="${currentWeather != null}" class="current-weather-summary">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <div class="d-flex align-items-center">
+                    <div class="me-4">
+                        <i class="fas fa-map-marker-alt mb-3" style="font-size: 2rem;"></i>
+                        <h2 class="fw-bold mb-2" th:text="${currentWeather.name ?: currentCity}">City Name</h2>
+                        <p class="mb-0 opacity-75" th:text="${currentWeather.weather != null and !currentWeather.weather.empty ? currentWeather.weather[0].description : 'Clear sky'}">Clear sky</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 text-end">
+                <div class="temperature-display" th:if="${currentWeather.main != null and currentWeather.main.temp_display != null}" th:text="${currentWeather.main.temp_display}">25°C</div>
+                <div class="temperature-display" th:if="${currentWeather.main == null or currentWeather.main.temp_display == null}" th:text="${currentWeather.main != null ? #numbers.formatDecimal(currentWeather.main.temp, 0, 0) + '°C' : '25°C'}">25°C</div>
+                <p class="mb-0 opacity-75">
+                    Feels like <span th:if="${currentWeather.main != null and currentWeather.main.feels_like_display != null}" th:text="${currentWeather.main.feels_like_display}">27°C</span>
+                    <span th:if="${currentWeather.main == null or currentWeather.main.feels_like_display == null}" th:text="${currentWeather.main != null ? #numbers.formatDecimal(currentWeather.main.feels_like, 0, 0) + '°C' : '27°C'}">27°C</span>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Weather Alerts -->
+    <div th:if="${hasAlerts}" class="row mb-4">
+        <div class="col-12">
+            <div class="card weather-card">
+                <div class="card-header bg-warning text-white">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Active Weather Alerts
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div th:each="alert : ${weatherAlerts}">
+                        <div th:class="${alert.severity == 'warning' ? 'alert-danger-custom' :
+                                      (alert.severity == 'watch' ? 'alert-warning-custom' : 'alert-info-custom')} + ' alert-custom'">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h6 class="fw-bold mb-2">
+                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                        <span th:text="${alert.title}">Alert Title</span>
+                                    </h6>
+                                    <p class="mb-2" th:text="${alert.description}">Alert description goes here with detailed information about the weather condition.</p>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <small>
+                                                <i class="fas fa-play me-1"></i>
+                                                Started: <span th:text="${#dates.format(new java.util.Date(alert.start * 1000), 'MMM dd, HH:mm')}">Start time</span>
+                                            </small>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <small>
+                                                <i class="fas fa-stop me-1"></i>
+                                                Until: <span th:text="${#dates.format(new java.util.Date(alert.end * 1000), 'MMM dd, HH:mm')}">End time</span>
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge bg-light text-dark" th:text="${alert.severity?.toUpperCase()}">SEVERITY</span>
+                                    <div class="small mt-1" th:if="${alert.source}" th:text="${alert.source}">Source</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Hourly Forecast -->
+        <div class="col-lg-8 mb-4">
+            <div class="card weather-card h-100">
+                <div class="card-header hero-bg text-white">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="fas fa-clock me-2"></i>48-Hour Detailed Forecast
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- Forecast Chart -->
+                    <div class="mb-4">
+                        <canvas id="forecastChart" class="forecast-chart"></canvas>
+                    </div>
+
+                    <!-- Hourly Grid -->
+                    <div th:if="${hourlyForecast != null}" class="hourly-forecast-grid">
+                        <div th:each="hour : ${hourlyForecast.hourly}" class="hourly-item">
+                            <div class="fw-bold text-primary mb-2" th:text="${hour.day}">Mon</div>
+                            <div class="fw-bold mb-2" th:text="${hour.hour}">12:00</div>
+
+                            <div class="mb-3">
+                                <i class="fas fa-sun text-warning" style="font-size: 2rem;"></i>
+                            </div>
+
+                            <div class="metric-value mb-2">
+                                <span th:if="${hour.temp_display != null}" th:text="${hour.temp_display}">25°C</span>
+                                <span th:if="${hour.temp_display == null}" th:text="${#numbers.formatDecimal(hour.temp, 0, 0) + '°C'}">25°C</span>
+                            </div>
+
+                            <div class="small text-muted mb-2" th:text="${hour.description}">Clear sky</div>
+
+                            <div class="row text-center small">
+                                <div class="col-6">
+                                    <i class="fas fa-eye-dropper text-primary"></i>
+                                    <div th:text="${hour.pop + '%'}">10%</div>
+                                </div>
+                                <div class="col-6">
+                                    <i class="fas fa-tint text-primary"></i>
+                                    <div th:text="${hour.humidity + '%'}">65%</div>
+                                </div>
+                            </div>
+
+                            <div class="row text-center small mt-2">
+                                <div class="col-12">
+                                    <i class="fas fa-wind text-primary"></i>
+                                    <div>
+                                        <span th:if="${hour.wind_speed_display != null}" th:text="${hour.wind_speed_display}">12 km/h</span>
+                                        <span th:if="${hour.wind_speed_display == null}" th:text="${#numbers.formatDecimal(hour.wind_speed * 3.6, 0, 0) + ' km/h'}">12 km/h</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Conditions Detail -->
+        <div class="col-lg-4 mb-4">
+            <div class="card weather-card h-100">
+                <div class="card-header hero-bg text-white">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="fas fa-thermometer-half me-2"></i>Current Conditions
+                    </h5>
+                </div>
+                <div class="card-body" th:if="${currentWeather != null}">
+                    <div class="weather-metric">
+                        <i class="fas fa-thermometer-half text-danger metric-icon"></i>
+                        <div class="metric-value">
+                            <span th:if="${currentWeather.main != null and currentWeather.main.temp_display != null}" th:text="${currentWeather.main.temp_display}">25°C</span>
+                            <span th:if="${currentWeather.main == null or currentWeather.main.temp_display == null}" th:text="${currentWeather.main != null ? #numbers.formatDecimal(currentWeather.main.temp, 0, 0) + '°C' : '25°C'}">25°C</span>
+                        </div>
+                        <div class="text-muted">Temperature</div>
+                    </div>
+
+                    <div class="weather-metric">
+                        <i class="fas fa-eye text-info metric-icon"></i>
+                        <div class="metric-value">
+                            <span th:if="${currentWeather.main != null and currentWeather.main.feels_like_display != null}" th:text="${currentWeather.main.feels_like_display}">27°C</span>
+                            <span th:if="${currentWeather.main == null or currentWeather.main.feels_like_display == null}" th:text="${currentWeather.main != null ? #numbers.formatDecimal(currentWeather.main.feels_like, 0, 0) + '°C' : '27°C'}">27°C</span>
+                        </div>
+                        <div class="text-muted">Feels Like</div>
+                    </div>
+
+                    <div class="weather-metric">
+                        <i class="fas fa-tint text-primary metric-icon"></i>
+                        <div class="metric-value" th:text="${currentWeather.main != null ? currentWeather.main.humidity + '%' : '65%'}">65%</div>
+                        <div class="text-muted">Humidity</div>
+                    </div>
+
+                    <div class="weather-metric">
+                        <i class="fas fa-wind text-success metric-icon"></i>
+                        <div class="metric-value">
+                            <span th:if="${currentWeather.wind != null and currentWeather.wind.speed_display != null}" th:text="${currentWeather.wind.speed_display}">12 km/h</span>
+                            <span th:if="${currentWeather.wind == null or currentWeather.wind.speed_display == null}" th:text="${currentWeather.wind != null ? #numbers.formatDecimal(currentWeather.wind.speed * 3.6, 0, 0) + ' km/h' : '12 km/h'}">12 km/h</span>
+                        </div>
+                        <div class="text-muted">Wind Speed</div>
+                    </div>
+
+                    <div class="weather-metric">
+                        <i class="fas fa-gauge text-warning metric-icon"></i>
+                        <div class="metric-value" th:text="${currentWeather.main != null ? currentWeather.main.pressure + ' hPa' : '1013 hPa'}">1013 hPa</div>
+                        <div class="text-muted">Pressure</div>
+                    </div>
+
+                    <div class="weather-metric" th:if="${currentWeather.visibility != null}">
+                        <i class="fas fa-eye text-secondary metric-icon"></i>
+                        <div class="metric-value" th:text="${currentWeather.visibility / 1000 + ' km'}">10 km</div>
+                        <div class="text-muted">Visibility</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bootstrap JS CDN -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // Create detailed forecast chart
+    document.addEventListener('DOMContentLoaded', function() {
+        const hourlyData = /*[[${hourlyForecast?.hourly}]]*/ null;
+
+        if (hourlyData && typeof Chart !== 'undefined') {
+            createDetailedForecastChart(hourlyData);
+        }
+    });
+
+    function createDetailedForecastChart(hourlyData) {
+        const ctx = document.getElementById('forecastChart');
+        if (!ctx || !hourlyData) return;
+
+        const next24Hours = hourlyData.slice(0, 8); // Next 24 hours (8 * 3-hour intervals)
+
+        const labels = next24Hours.map(hour => hour.hour);
+        const temperatures = next24Hours.map(hour => hour.temp_numeric || hour.temp);
+        const feelsLike = next24Hours.map(hour => hour.feels_like || hour.temp);
+        const precipitation = next24Hours.map(hour => hour.pop);
+        const humidity = next24Hours.map(hour => hour.humidity);
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Temperature',
+                    data: temperatures,
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    tension: 0.4,
+                    yAxisID: 'y',
+                    borderWidth: 3
+                }, {
+                    label: 'Feels Like',
+                    data: feelsLike,
+                    borderColor: '#764ba2',
+                    backgroundColor: 'rgba(118, 75, 162, 0.1)',
+                    tension: 0.4,
+                    yAxisID: 'y',
+                    borderWidth: 2,
+                    borderDash: [5, 5]
+                }, {
+                    label: 'Precipitation (%)',
+                    data: precipitation,
+                    borderColor: '#42a5f5',
+                    backgroundColor: 'rgba(66, 165, 245, 0.2)',
+                    tension: 0.4,
+                    yAxisID: 'y1',
+                    borderWidth: 2
+                }, {
+                    label: 'Humidity (%)',
+                    data: humidity,
+                    borderColor: '#26c6da',
+                    backgroundColor: 'rgba(38, 198, 218, 0.1)',
+                    tension: 0.4,
+                    yAxisID: 'y1',
+                    borderWidth: 2,
+                    borderDash: [3, 3]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                scales: {
+                    x: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Time',
+                            font: {
+                                weight: 'bold'
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'Temperature (°)',
+                            font: {
+                                weight: 'bold'
+                            }
+                        },
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: 'Percentage (%)',
+                            font: {
+                                weight: 'bold'
+                            }
+                        },
+                        grid: {
+                            drawOnChartArea: false,
+                        },
+                        min: 0,
+                        max: 100
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 20
+                        }
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        backgroundColor: 'rgba(0,0,0,0.8)',
+                        titleColor: 'white',
+                        bodyColor: 'white',
+                        borderColor: '#667eea',
+                        borderWidth: 1
+                    }
+                }
+            }
+        });
+    }
+
+    // Auto-dismiss alerts
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(() => {
+            document.querySelectorAll('.alert-dismissible').forEach(alert => {
+                if (alert.classList.contains('show')) {
+                    alert.classList.remove('show');
+                }
+            });
+        }, 10000); // Dismiss after 10 seconds
+    });
+</script>
+</body>
+</html>

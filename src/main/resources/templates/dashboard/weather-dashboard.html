@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Dashboard</title>
+    <!-- Bootstrap CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom CSS -->
+    <style>
+        .hero-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .weather-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        .weather-card:hover {
+            transform: translateY(-2px);
+        }
+        .temperature-display {
+            font-size: 4rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .weather-icon {
+            font-size: 4rem;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+        .search-container {
+            position: relative;
+        }
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 0 0 10px 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .search-result-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+        .search-result-item:hover {
+            background-color: #f8f9fa;
+        }
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        }
+
+        /* Hourly Forecast Styles */
+        .hourly-forecast {
+            overflow-x: auto;
+            white-space: nowrap;
+            padding: 10px 0;
+        }
+        .hourly-item {
+            display: inline-block;
+            text-align: center;
+            min-width: 100px;
+            margin-right: 15px;
+            padding: 15px 10px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease;
+        }
+        .hourly-item:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Weather Alerts Styles */
+        .alert-warning-custom {
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+        }
+        .alert-danger-custom {
+            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+        }
+        .alert-info-custom {
+            background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+        }
+
+        .forecast-chart {
+            height: 200px;
+        }
+
+        .weather-metric {
+            text-align: center;
+            padding: 10px;
+        }
+
+        .metric-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+    </style>
+    <!-- Add Leaflet CSS in <head> -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <meta name="_csrf" th:content="${_csrf != null ? _csrf.token : ''}"/>
+    <meta name="_csrf_header" th:content="${_csrf != null ? _csrf.headerName : 'X-XSRF-TOKEN'}"/>
+</head>
+<body class="bg-light">
+
+<!-- Navigation -->
+<nav class="navbar navbar-expand-lg navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand fw-bold" href="/dashboard">
+            <i class="fas fa-cloud-sun me-2"></i>Weather Dashboard
+        </a>
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link active" href="/dashboard">
+                        <i class="fas fa-home me-1"></i>Dashboard
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/dashboard/compare">
+                        <i class="fas fa-balance-scale me-1"></i>Compare
+                    </a>
+                </li>
+            </ul>
+
+            <div class="dropdown">
+                <a class="nav-link dropdown-toggle text-white text-decoration-none" href="#" role="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-user-circle me-2"></i>
+                    <span th:text="${user != null ? user.username : 'User'}">User</span>
+                </a>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="/dashboard/profile">
+                        <i class="fas fa-cog me-2"></i>Profile Settings
+                    </a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <form th:action="@{/logout}" method="post" class="d-inline">
+                            <button type="submit" class="dropdown-item">
+                                <i class="fas fa-sign-out-alt me-2"></i>Logout
+                            </button>
+                        </form>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<!-- Main Content -->
+<div class="container-fluid py-4">
+    <!-- Welcome Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card weather-card">
+                <div class="card-body text-center py-4 hero-bg text-white">
+                    <h1 class="display-5 mb-3">
+                        <i class="fas fa-cloud-sun me-3"></i>Welcome to Weather Dashboard!
+                    </h1>
+                    <p class="lead mb-0">
+                        Hello <span th:text="${user != null ? user.username : 'User'}" class="fw-bold">admin</span>!
+                        Get real-time weather information for any city worldwide.
+                        <span th:if="${user != null}" class="ms-2">
+                            <span th:if="${user.roles != null}" class="fw-bold">
+                                <span th:each="role : ${user.roles}">
+                                    <span th:switch="${role}">
+                                        <span th:case="'ADMIN'" class="badge bg-danger me-1">Admin</span>
+                                        <span th:case="'PREMIUM'" class="badge bg-warning text-dark me-1">Premium</span>
+                                        <span th:case="'USER'" class="badge bg-secondary me-1">User</span>
+                                    </span>
+                                </span>
+                            </span>
+                        </span>
+                        <span th:if="${userPreferences != null}" class="small d-block mt-2">
+                            Temperature in <span th:text="${userPreferences.temperatureUnit}">celsius</span> •
+                            Wind in <span th:text="${userPreferences.windSpeedUnit}">kmh</span>
+                        </span>
+                    </p>
+                    <div th:if="${user != null and !user.roles.contains('PREMIUM') and !user.roles.contains('ADMIN')}" class="mt-3">
+                        <button id="upgradePremiumBtn" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#premiumModal">
+                            <i class="fas fa-star me-1"></i>Upgrade to Premium
+                        </button>
+                        <span id="upgradeStatus" class="ms-2 text-success fw-bold d-none">Upgraded!</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Weather Alerts Section -->
+    <div th:if="${hasAlerts}" class="row mb-4">
+        <div class="col-12">
+            <div class="card weather-card">
+                <div class="card-header bg-warning text-white">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Weather Alerts
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div th:each="alert : ${weatherAlerts}" class="mb-3">
+                        <div th:class="${alert.severity == 'warning' ? 'alert alert-danger-custom' :
+                                      (alert.severity == 'watch' ? 'alert alert-warning-custom' : 'alert alert-info-custom')}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="fw-bold mb-2">
+                                        <i class="fas fa-warning me-2"></i>
+                                        <span th:text="${alert.title}">Alert Title</span>
+                                    </h6>
+                                    <p class="mb-2" th:text="${alert.description}">Alert description</p>
+                                    <small>
+                                        <i class="fas fa-clock me-1"></i>
+                                        Active until <span th:text="${#dates.format(new java.util.Date(alert.end * 1000), 'MMM dd, HH:mm')}">End time</span>
+                                    </small>
+                                </div>
+                                <span th:class="${alert.severity == 'warning' ? 'badge bg-light text-dark' : 'badge bg-light text-dark'}"
+                                      th:text="${alert.severity?.toUpperCase()}">SEVERITY</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Flash Messages -->
+    <div th:if="${error}" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="fas fa-exclamation-circle me-2"></i>
+        <span th:text="${error}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+
+    <div class="row">
+        <!-- Left Sidebar -->
+        <div class="col-lg-3 mb-4">
+            <div class="card weather-card">
+                <div class="card-header hero-bg text-white">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="fas fa-search me-2"></i>Search Location
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="search-container">
+                        <form th:action="@{/dashboard/search}" method="get" class="mb-3">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="fas fa-map-marker-alt"></i>
+                                </span>
+                                <input type="text" class="form-control" name="city"
+                                       id="citySearch" placeholder="Enter city name..."
+                                       autocomplete="off" required>
+                                <button class="btn btn-primary" type="submit">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </div>
+                        </form>
+                        <div id="searchResults" class="search-results" style="display: none;"></div>
+                    </div>
+
+                    <!-- Add a button to open the map modal in the left sidebar, after the search box -->
+                    <button class="btn btn-outline-info w-100 mb-3" onclick="openMapModal()">
+                        <i class="fas fa-map-marked-alt me-2"></i>Pick Location from Map
+                    </button>
+
+                    <!-- Popular Cities -->
+                    <h6 class="mb-3 fw-bold">
+                        <i class="fas fa-star text-warning me-2"></i>Popular Cities
+                    </h6>
+                    <div class="d-grid gap-2 mb-3">
+                        <a href="/dashboard/weather/Mumbai" class="btn btn-outline-primary btn-sm text-start">
+                            <i class="fas fa-map-marker-alt me-2"></i>Mumbai
+                        </a>
+                        <a href="/dashboard/weather/Delhi" class="btn btn-outline-primary btn-sm text-start">
+                            <i class="fas fa-map-marker-alt me-2"></i>Delhi
+                        </a>
+                        <a href="/dashboard/weather/London" class="btn btn-outline-primary btn-sm text-start">
+                            <i class="fas fa-map-marker-alt me-2"></i>London
+                        </a>
+                        <a href="/dashboard/weather/New York" class="btn btn-outline-primary btn-sm text-start">
+                            <i class="fas fa-map-marker-alt me-2"></i>New York
+                        </a>
+                        <a href="/dashboard/weather/Tokyo" class="btn btn-outline-primary btn-sm text-start">
+                            <i class="fas fa-map-marker-alt me-2"></i>Tokyo
+                        </a>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Weather Display -->
+        <div class="col-lg-9">
+            <!-- Current Weather Card -->
+            <div th:if="${currentWeather != null}" class="card weather-card mb-4">
+                <div class="card-body p-4">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center mb-3">
+                                <i class="fas fa-map-marker-alt text-primary me-2"></i>
+                                <h2 class="mb-0 fw-bold" th:text="${currentWeather.name ?: currentCity}">City Name</h2>
+                            </div>
+                            <p class="text-muted mb-4">Current Weather Conditions</p>
+
+                            <div class="d-flex align-items-center">
+                                <div class="weather-icon me-4">
+                                    <i class="fas fa-sun text-warning"></i>
+                                </div>
+                                <div>
+                                    <div class="temperature-display">
+                                        <span th:if="${currentWeather.main != null and currentWeather.main.temp_display != null}"
+                                              th:text="${currentWeather.main.temp_display}">25°C</span>
+                                        <span th:if="${currentWeather.main == null or currentWeather.main.temp_display == null}"
+                                              th:text="${currentWeather.main != null ? #numbers.formatDecimal(currentWeather.main.temp, 0, 0) + '°C' : '25°C'}">25°C</span>
+                                    </div>
+                                    <p class="text-muted h6 mb-0"
+                                       th:text="${currentWeather.weather != null and !currentWeather.weather.empty ? currentWeather.weather[0].description : 'Clear sky'}">
+                                        Clear sky
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="weather-stats">
+                                <div class="row text-center">
+                                    <div class="col-4">
+                                        <i class="fas fa-tint text-primary d-block mb-2 fs-4"></i>
+                                        <p class="small text-muted mb-1">Humidity</p>
+                                        <h5 class="fw-bold" th:text="${currentWeather.main != null ? currentWeather.main.humidity + '%' : '65%'}">65%</h5>
+                                    </div>
+                                    <div class="col-4">
+                                        <i class="fas fa-wind text-primary d-block mb-2 fs-4"></i>
+                                        <p class="small text-muted mb-1">Wind Speed</p>
+                                        <h5 class="fw-bold">
+                                            <span th:if="${currentWeather?.wind?.speed_display != null}"
+                                                  th:text="${currentWeather.wind.speed_display}">12 km/h</span>
+                                            <span th:if="${currentWeather?.wind?.speed_display == null}">
+                                                    <span th:if="${currentWeather?.wind?.speed != null}"
+                                                          th:text="${#numbers.formatDecimal(currentWeather.wind.speed * 3.6, 0, 0) + ' km/h'}">12 km/h</span>
+                                                    <span th:if="${currentWeather?.wind?.speed == null}">12 km/h</span>
+                                            </span>
+                                        </h5>
+                                    </div>
+                                    <div class="col-4">
+                                        <i class="fas fa-thermometer-half text-primary d-block mb-2 fs-4"></i>
+                                        <p class="small text-muted mb-1">Feels Like</p>
+                                        <h5 class="fw-bold">
+                                            <span th:if="${currentWeather.main != null and currentWeather.main.feels_like_display != null}"
+                                                  th:text="${currentWeather.main.feels_like_display}">27°C</span>
+                                            <span th:if="${currentWeather.main == null or currentWeather.main.feels_like_display == null}"
+                                                  th:text="${currentWeather.main != null ? #numbers.formatDecimal(currentWeather.main.feels_like, 0, 0) + '°C' : '27°C'}">27°C</span>
+                                        </h5>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Action Buttons -->
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <!-- Show forecast button to all users -->
+                            <a th:if="${currentCity != null}"
+                               th:href="@{'/dashboard/forecast/' + ${currentCity}}"
+                               class="btn btn-outline-primary w-100 forecast-btn">
+                                <i class="fas fa-chart-line me-2"></i>Detailed Forecast
+                                <span th:if="${user == null or (!user.roles.contains('PREMIUM') and !user.roles.contains('ADMIN'))}"
+                                      class="badge bg-warning text-dark ms-2">Premium</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Add this JavaScript at the bottom of the file, before closing </body> tag -->
+                    <script>
+                        // Remove or comment out the handleForecastAccess and showPremiumUpgradeDialog JS functions if present.
+                    </script>
+
+            <!-- Default Message when no weather data -->
+            <div th:if="${currentWeather == null}" class="card weather-card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-cloud-sun text-primary mb-4" style="font-size: 5rem;"></i>
+                    <h3 class="text-primary mb-3">Search for a city to view weather information</h3>
+                    <p class="text-muted fs-5">Use the search box on the left or click on popular cities to get started.</p>
+                    <div class="mt-4">
+                        <a href="/dashboard/weather/Mumbai" class="btn btn-primary me-2">
+                            <i class="fas fa-map-marker-alt me-2"></i>Try Mumbai
+                        </a>
+                        <a href="/dashboard/weather/London" class="btn btn-outline-primary">
+                            <i class="fas fa-map-marker-alt me-2"></i>Try London
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="row mt-4">
+                <div class="col-md-6 mb-3">
+                    <div class="card weather-card h-100">
+                        <div class="card-body text-center">
+                            <i class="fas fa-balance-scale text-primary mb-3" style="font-size: 3rem;"></i>
+                            <h5 class="fw-bold">Compare Cities</h5>
+                            <p class="text-muted">Compare weather across multiple cities</p>
+                            <a href="/dashboard/compare" class="btn btn-primary">
+                                <i class="fas fa-arrow-right me-2"></i>Compare Now
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <div class="card weather-card h-100">
+                        <div class="card-body text-center">
+                            <i class="fas fa-cog text-primary mb-3" style="font-size: 3rem;"></i>
+                            <h5 class="fw-bold">Profile Settings</h5>
+                            <p class="text-muted">Customize your dashboard preferences</p>
+                            <a href="/dashboard/profile" class="btn btn-primary">
+                                <i class="fas fa-arrow-right me-2"></i>Settings
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Map Modal at the end of <body> -->
+<div class="modal fade" id="mapModal" tabindex="-1" aria-labelledby="mapModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="mapModalLabel">Select Location on Map</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="height: 500px;">
+        <div id="leafletMap" style="height: 100%; width: 100%;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Premium Upgrade Modal -->
+<div class="modal fade" id="premiumModal" tabindex="-1" aria-labelledby="premiumModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="premiumModalLabel">Upgrade to Premium</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="premiumForm">
+          <div class="mb-3">
+            <label for="promoCode" class="form-label">Enter Promo Code</label>
+            <input type="text" class="form-control" id="promoCode" placeholder="Enter code (e.g., PREMIUM2024)" required>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Upgrade</button>
+        </form>
+        <div id="premiumResult" class="alert mt-3 d-none"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bootstrap JS CDN -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Custom JavaScript -->
+<script th:src="@{/js/weather-dashboard.js}"></script>
+<script>
+    // Auto-dismiss alerts after 5 seconds
+    document.addEventListener('DOMContentLoaded', function() {
+        const alerts = document.querySelectorAll('.alert');
+        alerts.forEach(alert => {
+            setTimeout(() => {
+                if (alert.classList.contains('show')) {
+                    alert.classList.remove('show');
+                    setTimeout(() => alert.remove(), 150);
+                }
+            }, 5000);
+        });
+    });
+
+    // City search with autocomplete
+    document.getElementById('citySearch').addEventListener('input', function() {
+        const query = this.value.trim();
+        const resultsContainer = document.getElementById('searchResults');
+
+        if (query.length < 2) {
+            resultsContainer.style.display = 'none';
+            return;
+        }
+
+        // Simple autocomplete with popular cities
+        const cities = ['Mumbai', 'Delhi', 'London', 'New York', 'Tokyo', 'Paris', 'Sydney', 'Toronto', 'Berlin', 'Dubai', 'Nagpur'];
+        const matches = cities.filter(city => city.toLowerCase().includes(query.toLowerCase()));
+
+        if (matches.length > 0) {
+            resultsContainer.innerHTML = matches.map(city =>
+                `<div class="search-result-item" onclick="selectCity('${city}')">${city}</div>`
+            ).join('');
+            resultsContainer.style.display = 'block';
+        } else {
+            resultsContainer.style.display = 'none';
+        }
+    });
+
+    function selectCity(city) {
+        document.getElementById('citySearch').value = city;
+        document.getElementById('searchResults').style.display = 'none';
+        window.location.href = `/dashboard/weather/${encodeURIComponent(city)}`;
+    }
+
+    // Hide search results when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.search-container')) {
+            document.getElementById('searchResults').style.display = 'none';
+        }
+    });
+
+
+
+    // Load hourly forecast chart if Chart.js is available
+    document.addEventListener('DOMContentLoaded', function() {
+        const hourlyData = /*[[${hourlyForecast?.hourly}]]*/ null;
+
+        if (hourlyData && typeof Chart !== 'undefined') {
+            createHourlyChart(hourlyData);
+        }
+    });
+
+    function createHourlyChart(hourlyData) {
+        const ctx = document.getElementById('hourlyChart');
+        if (!ctx || !hourlyData) return;
+
+        const labels = hourlyData.slice(0, 12).map(hour => hour.hour);
+        const temperatures = hourlyData.slice(0, 12).map(hour =>
+            hour.temp_numeric || hour.temp
+        );
+        const precipitation = hourlyData.slice(0, 12).map(hour => hour.pop);
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Temperature',
+                    data: temperatures,
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    tension: 0.4,
+                    yAxisID: 'y'
+                }, {
+                    label: 'Precipitation (%)',
+                    data: precipitation,
+                    borderColor: '#42a5f5',
+                    backgroundColor: 'rgba(66, 165, 245, 0.1)',
+                    tension: 0.4,
+                    yAxisID: 'y1'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                scales: {
+                    x: {
+                        display: true,
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'Temperature (°)'
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: 'Precipitation (%)'
+                        },
+                        grid: {
+                            drawOnChartArea: false,
+                        },
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    }
+                }
+            }
+        });
+    }
+
+    // Weather alert interactions
+    document.querySelectorAll('.alert-dismissible').forEach(alert => {
+        alert.addEventListener('closed.bs.alert', function() {
+            // Optional: Send AJAX request to mark alert as dismissed
+            console.log('Alert dismissed');
+        });
+    });
+
+    // Auto-refresh weather data every 10 minutes
+    setInterval(function() {
+        const currentPath = window.location.pathname;
+        if (currentPath.includes('/weather/')) {
+            // Only refresh if user is still on the same page
+            if (document.hasFocus()) {
+                console.log('Auto-refreshing weather data...');
+                // Uncomment to enable auto-refresh
+                // window.location.reload();
+            }
+        }
+    }, 600000); // 10 minutes
+
+    // Smooth scrolling for hourly forecast
+    document.querySelector('.hourly-forecast')?.addEventListener('wheel', function(e) {
+        if (e.deltaY !== 0) {
+            e.preventDefault();
+            this.scrollLeft += e.deltaY;
+        }
+    });
+
+    // CSRF helpers
+    function getCsrfToken() {
+        const metaToken = document.querySelector('meta[name="_csrf"]');
+        if (metaToken) return metaToken.getAttribute('content');
+        // fallback: try cookie
+        const cookies = document.cookie.split(';');
+        for (let cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === 'XSRF-TOKEN') return decodeURIComponent(value);
+        }
+        return null;
+    }
+    function getCsrfHeader() {
+        const metaHeader = document.querySelector('meta[name="_csrf_header"]');
+        if (metaHeader) return metaHeader.getAttribute('content');
+        return 'X-XSRF-TOKEN';
+    }
+
+    // Premium upgrade AJAX with promo code
+    const premiumForm = document.getElementById('premiumForm');
+    const premiumResult = document.getElementById('premiumResult');
+    if (premiumForm) {
+        premiumForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const code = document.getElementById('promoCode').value.trim();
+            if (code !== 'PREMIUM2024') {
+                premiumResult.className = 'alert alert-danger mt-3';
+                premiumResult.textContent = 'Invalid promo code!';
+                premiumResult.classList.remove('d-none');
+                return;
+            }
+            const csrfToken = getCsrfToken();
+            const csrfHeader = getCsrfHeader();
+            fetch('/api/user/upgrade', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    [csrfHeader]: csrfToken
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'upgraded') {
+                    premiumResult.className = 'alert alert-success mt-3';
+                    premiumResult.textContent = 'You are now Premium! Redirecting...';
+                    premiumResult.classList.remove('d-none');
+                    document.getElementById('upgradeStatus').classList.remove('d-none');
+                    setTimeout(() => window.location.href = '/dashboard', 1500);
+                }
+            });
+        });
+    }
+</script>
+<!-- Add Leaflet JS before closing </body> -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+let map, marker;
+function openMapModal() {
+    const modal = new bootstrap.Modal(document.getElementById('mapModal'));
+    modal.show();
+    setTimeout(() => {
+        if (!map) {
+            map = L.map('leafletMap').setView([20, 0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+            map.on('click', onMapClick);
+        } else {
+            map.invalidateSize();
+        }
+    }, 300);
+}
+function onMapClick(e) {
+    if (marker) {
+        marker.setLatLng(e.latlng);
+    } else {
+        marker = L.marker(e.latlng).addTo(map);
+    }
+    fetch(`https://nominatim.openstreetmap.org/reverse?lat=${e.latlng.lat}&lon=${e.latlng.lng}&format=json`)
+        .then(res => res.json())
+        .then(data => {
+            let city = data.address.city || data.address.town || data.address.village || data.address.state || '';
+            if (city) {
+                window.location.href = `/dashboard/weather/${encodeURIComponent(city)}`;
+                bootstrap.Modal.getInstance(document.getElementById('mapModal')).hide();
+            } else {
+                alert('Could not determine city. Please try another location.');
+            }
+        })
+        .catch(() => alert('Failed to get location details.'));
+}
+</script>
+</body>
+</html>

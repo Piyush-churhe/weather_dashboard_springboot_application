@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compare Cities - Weather Dashboard</title>
+
+    <!-- Bootstrap CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Add Leaflet CSS in <head> -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .hero-bg {
+            background: linear-gradient(135deg, #1976d2 0%, #42a5f5 100%);
+        }
+        .weather-card {
+            border: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-radius: 15px;
+            transition: transform 0.2s;
+        }
+        .weather-card:hover {
+            transform: translateY(-2px);
+        }
+        .city-card {
+            border: 2px solid #e9ecef;
+            border-radius: 15px;
+            transition: all 0.3s;
+            height: 100%;
+        }
+        .city-card.selected {
+            border-color: #1976d2;
+            box-shadow: 0 4px 15px rgba(25, 118, 210, 0.2);
+        }
+        .temperature-large {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #1976d2;
+        }
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .search-result-item {
+            padding: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.2s;
+        }
+        .search-result-item:hover {
+            background-color: #f8f9fa;
+        }
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
+        .comparison-table {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        .btn-primary {
+            background: linear-gradient(45deg, #1976d2, #42a5f5);
+            border: none;
+            border-radius: 10px;
+            transition: all 0.3s;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(45deg, #1565c0, #1976d2);
+            transform: translateY(-1px);
+        }
+        .weather-icon {
+            font-size: 3rem;
+        }
+    </style>
+</head>
+<body>
+<!-- Navigation -->
+<nav class="navbar navbar-expand-lg navbar-dark hero-bg shadow">
+    <div class="container">
+        <a class="navbar-brand fw-bold" href="/dashboard">
+            <i class="fas fa-cloud-sun me-2"></i>Weather Dashboard
+        </a>
+
+        <div class="navbar-nav ms-auto">
+            <a class="nav-link text-white" href="/dashboard">
+                <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+            </a>
+            <div class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle text-white fw-bold" href="#" role="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-user me-2"></i>
+                    <span th:text="${user != null ? user.username : 'User'}">User</span>
+                </a>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="/dashboard/profile">
+                        <i class="fas fa-cog me-2"></i>Profile Settings
+                    </a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <form th:action="@{/logout}" method="post" class="d-inline">
+                            <button type="submit" class="dropdown-item">
+                                <i class="fas fa-sign-out-alt me-2"></i>Logout
+                            </button>
+                        </form>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<!-- Main Content -->
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card weather-card">
+                <div class="card-body text-center py-4">
+                    <h1 class="display-5 text-primary mb-3">
+                        <i class="fas fa-balance-scale me-3"></i>Compare Weather Across Cities
+                    </h1>
+                    <p class="lead text-muted mb-0">
+                        Add up to 4 cities to compare their current weather conditions side by side
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Search Panel -->
+        <div class="col-lg-4 mb-4">
+            <div class="card weather-card">
+                <div class="card-header hero-bg text-white">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="fas fa-search me-2"></i>Add Cities to Compare
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- City Search -->
+                    <div class="position-relative mb-4">
+                        <div class="input-group">
+                                <span class="input-group-text bg-primary text-white">
+                                    <i class="fas fa-map-marker-alt"></i>
+                                </span>
+                            <input type="text" id="citySearchInput" class="form-control"
+                                   placeholder="Search for a city..." autocomplete="off">
+                            <button type="button" class="btn btn-primary" onclick="searchCities()">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                        <div id="searchResults" class="search-results" style="display: none;"></div>
+                    </div>
+
+                    <!-- Quick Add Buttons -->
+                    <div class="mb-4">
+                        <h6 class="mb-3 fw-bold">
+                            <i class="fas fa-star text-warning me-2"></i>Quick Add
+                        </h6>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-outline-primary btn-sm" onclick="addCityToComparison('Mumbai', 'India')">
+                                <i class="fas fa-plus me-2"></i>Mumbai
+                            </button>
+                            <button class="btn btn-outline-primary btn-sm" onclick="addCityToComparison('Delhi', 'India')">
+                                <i class="fas fa-plus me-2"></i>Delhi
+                            </button>
+                            <button class="btn btn-outline-primary btn-sm" onclick="addCityToComparison('London', 'United Kingdom')">
+                                <i class="fas fa-plus me-2"></i>London
+                            </button>
+                            <button class="btn btn-outline-primary btn-sm" onclick="addCityToComparison('New York', 'United States')">
+                                <i class="fas fa-plus me-2"></i>New York
+                            </button>
+                            <button class="btn btn-outline-primary btn-sm" onclick="addCityToComparison('Tokyo', 'Japan')">
+                                <i class="fas fa-plus me-2"></i>Tokyo
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Clear All Button -->
+                    <div class="mt-4">
+                        <button class="btn btn-outline-danger w-100" onclick="clearAllComparisons()">
+                            <i class="fas fa-trash-alt me-2"></i>Clear All Cities
+                        </button>
+                    </div>
+
+                    <!-- Add a button to open the map modal in the search panel, after the search box -->
+                    <button class="btn btn-outline-info w-100 mb-3" onclick="openMapModal()">
+                        <i class="fas fa-map-marked-alt me-2"></i>Pick Location from Map
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comparison Results -->
+        <div class="col-lg-8">
+            <!-- Selected Cities Count -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4 class="mb-0">
+                    <i class="fas fa-chart-bar text-primary me-2"></i>
+                    Weather Comparison
+                </h4>
+                <span class="badge bg-primary fs-6">
+                        <span id="cityCount">0</span> / 4 Cities
+                    </span>
+            </div>
+
+            <!-- Comparison Grid -->
+            <div id="comparisonGrid" class="row g-3">
+                <!-- Cities will be added here dynamically -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="card weather-card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-search-location text-muted mb-4" style="font-size: 5rem;"></i>
+                    <h3 class="text-muted mb-3">No cities selected for comparison</h3>
+                    <p class="text-muted fs-5 mb-4">
+                        Use the search box or quick add buttons to add cities for comparison
+                    </p>
+                    <button class="btn btn-primary" onclick="addCityToComparison('Mumbai', 'India')">
+                        <i class="fas fa-plus me-2"></i>Add Mumbai to get started
+                    </button>
+                </div>
+            </div>
+
+            <!-- Detailed Comparison Table -->
+            <div id="comparisonTable" class="card weather-card mt-4" style="display: none;">
+                <div class="card-header hero-bg text-white">
+                    <h5 class="mb-0 fw-bold">
+                        <i class="fas fa-table me-2"></i>Detailed Comparison
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                            <tr>
+                                <th>Metric</th>
+                                <th id="city1Header">-</th>
+                                <th id="city2Header">-</th>
+                                <th id="city3Header">-</th>
+                                <th id="city4Header">-</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr>
+                                <td class="fw-bold">🌡️ Temperature</td>
+                                <td id="temp1">-</td>
+                                <td id="temp2">-</td>
+                                <td id="temp3">-</td>
+                                <td id="temp4">-</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">🌡️ Feels Like</td>
+                                <td id="feels1">-</td>
+                                <td id="feels2">-</td>
+                                <td id="feels3">-</td>
+                                <td id="feels4">-</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">💧 Humidity</td>
+                                <td id="humidity1">-</td>
+                                <td id="humidity2">-</td>
+                                <td id="humidity3">-</td>
+                                <td id="humidity4">-</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">🌬️ Wind Speed</td>
+                                <td id="wind1">-</td>
+                                <td id="wind2">-</td>
+                                <td id="wind3">-</td>
+                                <td id="wind4">-</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">🏔️ Pressure</td>
+                                <td id="pressure1">-</td>
+                                <td id="pressure2">-</td>
+                                <td id="pressure3">-</td>
+                                <td id="pressure4">-</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">👁️ Visibility</td>
+                                <td id="visibility1">-</td>
+                                <td id="visibility2">-</td>
+                                <td id="visibility3">-</td>
+                                <td id="visibility4">-</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Map Modal at the end of <body> -->
+<div class="modal fade" id="mapModal" tabindex="-1" aria-labelledby="mapModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="mapModalLabel">Select Location on Map</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="height: 500px;">
+        <div id="leafletMap" style="height: 100%; width: 100%;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bootstrap JS CDN -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    let comparedCities = [];
+    let searchTimeout;
+
+    // Search for cities
+    function searchCities() {
+        const query = document.getElementById('citySearchInput').value.trim();
+        if (query.length < 2) {
+            hideSearchResults();
+            return;
+        }
+
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            fetch(`/dashboard/search?query=${encodeURIComponent(query)}`)
+                .then(response => response.json())
+                .then(cities => displaySearchResults(cities))
+                .catch(error => {
+                    console.error('Search error:', error);
+                    hideSearchResults();
+                });
+        }, 300);
+    }
+
+    // Display search results
+    function displaySearchResults(cities) {
+        const resultsDiv = document.getElementById('searchResults');
+
+        if (!cities || cities.length === 0) {
+            hideSearchResults();
+            return;
+        }
+
+        let html = '';
+        cities.forEach(city => {
+            const cityName = city.name || city.cityName;
+            const country = city.country;
+            const state = city.state ? `, ${city.state}` : '';
+
+            html += `
+                <div class="search-result-item" onclick="addCityToComparison('${cityName}', '${country}')">
+                    <i class="fas fa-map-marker-alt text-muted me-2"></i>
+                    <strong>${cityName}</strong>${state}, ${country}
+                </div>
+            `;
+        });
+
+        resultsDiv.innerHTML = html;
+        resultsDiv.style.display = 'block';
+    }
+
+    // Hide search results
+    function hideSearchResults() {
+        document.getElementById('searchResults').style.display = 'none';
+    }
+
+    // Add city to comparison
+    function addCityToComparison(cityName, country) {
+        if (comparedCities.length >= 4) {
+            alert('Maximum 4 cities can be compared at once');
+            return;
+        }
+
+        // Check if city already added
+        if (comparedCities.find(city => city.name === cityName)) {
+            alert(`${cityName} is already in the comparison`);
+            return;
+        }
+
+        // Clear search
+        document.getElementById('citySearchInput').value = '';
+        hideSearchResults();
+
+        // Show loading
+        showLoadingState(cityName);
+
+        // Fetch weather data
+        fetch(`/api/weather/current/${encodeURIComponent(cityName)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                addCityCard(data, country);
+                updateCityCount();
+                updateComparisonTable();
+            })
+            .catch(error => {
+                console.error('Weather fetch error:', error);
+                alert(`Failed to get weather data for ${cityName}: ${error.message}`);
+                removeLoadingState();
+            });
+    }
+
+    // Show loading state
+    function showLoadingState(cityName) {
+        const grid = document.getElementById('comparisonGrid');
+        const loadingCard = `
+            <div class="col-md-6 col-lg-3 loading-card">
+                <div class="card city-card">
+                    <div class="card-body text-center">
+                        <div class="spinner-border text-primary mb-3" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <h6>Loading ${cityName}...</h6>
+                    </div>
+                </div>
+            </div>
+        `;
+        grid.insertAdjacentHTML('beforeend', loadingCard);
+        updateVisibility();
+    }
+
+    // Remove loading state
+    function removeLoadingState() {
+        const loadingCard = document.querySelector('.loading-card');
+        if (loadingCard) {
+            loadingCard.remove();
+        }
+    }
+
+    // Add city card to comparison
+    function addCityCard(weatherData, country) {
+        removeLoadingState();
+
+        const cityData = {
+            name: weatherData.name,
+            country: country,
+            temperature: Math.round(weatherData.main.temp),
+            feelsLike: Math.round(weatherData.main.feels_like),
+            humidity: weatherData.main.humidity,
+            windSpeed: weatherData.wind.speed,
+            pressure: weatherData.main.pressure,
+            visibility: weatherData.visibility ? weatherData.visibility / 1000 : 'N/A',
+            description: weatherData.weather[0].description,
+            icon: getWeatherIcon(weatherData.weather[0].icon)
+        };
+
+        comparedCities.push(cityData);
+
+        const grid = document.getElementById('comparisonGrid');
+        const cityCard = `
+            <div class="col-md-6 col-lg-3 city-comparison" data-city="${cityData.name}">
+                <div class="card city-card selected">
+                    <div class="card-body text-center">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="card-title mb-0 fw-bold">${cityData.name}</h6>
+                            <button class="btn btn-sm btn-outline-danger"
+                                    onclick="removeCityFromComparison('${cityData.name}')">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <small class="text-muted d-block mb-3">${cityData.country}</small>
+
+                        <div class="weather-icon mb-3">
+                            <i class="${cityData.icon}"></i>
+                        </div>
+
+                        <div class="temperature-large mb-2">${cityData.temperature}°C</div>
+                        <p class="text-muted small mb-3" style="text-transform: capitalize;">
+                            ${cityData.description}
+                        </p>
+
+                        <div class="row text-center mt-3">
+                            <div class="col-6 mb-2">
+                                <small class="text-muted d-block">Humidity</small>
+                                <strong>${cityData.humidity}%</strong>
+                            </div>
+                            <div class="col-6 mb-2">
+                                <small class="text-muted d-block">Wind</small>
+                                <strong>${cityData.windSpeed} km/h</strong>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted d-block">Pressure</small>
+                                <strong>${cityData.pressure} hPa</strong>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted d-block">Feels Like</small>
+                                <strong>${cityData.feelsLike}°C</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        grid.insertAdjacentHTML('beforeend', cityCard);
+        updateVisibility();
+    }
+
+    // Remove city from comparison
+    function removeCityFromComparison(cityName) {
+        comparedCities = comparedCities.filter(city => city.name !== cityName);
+
+        const cityCard = document.querySelector(`[data-city="${cityName}"]`);
+        if (cityCard) {
+            cityCard.remove();
+        }
+
+        updateCityCount();
+        updateComparisonTable();
+        updateVisibility();
+    }
+
+    // Clear all comparisons
+    function clearAllComparisons() {
+        if (comparedCities.length === 0) return;
+
+        if (confirm('Remove all cities from comparison?')) {
+            comparedCities = [];
+            document.getElementById('comparisonGrid').innerHTML = '';
+            updateCityCount();
+            updateComparisonTable();
+            updateVisibility();
+        }
+    }
+
+    // Update city count
+    function updateCityCount() {
+        document.getElementById('cityCount').textContent = comparedCities.length;
+    }
+
+    // Update visibility of elements
+    function updateVisibility() {
+        const isEmpty = comparedCities.length === 0;
+        document.getElementById('emptyState').style.display = isEmpty ? 'block' : 'none';
+        document.getElementById('comparisonTable').style.display = isEmpty ? 'none' : 'block';
+    }
+
+    // Update comparison table
+    function updateComparisonTable() {
+        for (let i = 1; i <= 4; i++) {
+            const city = comparedCities[i - 1];
+            const headerCell = document.getElementById(`city${i}Header`);
+
+            if (city) {
+                headerCell.textContent = city.name;
+                headerCell.style.display = '';
+
+                document.getElementById(`temp${i}`).textContent = `${city.temperature}°C`;
+                document.getElementById(`feels${i}`).textContent = `${city.feelsLike}°C`;
+                document.getElementById(`humidity${i}`).textContent = `${city.humidity}%`;
+                document.getElementById(`wind${i}`).textContent = `${city.windSpeed} km/h`;
+                document.getElementById(`pressure${i}`).textContent = `${city.pressure} hPa`;
+                document.getElementById(`visibility${i}`).textContent = `${city.visibility} km`;
+            } else {
+                headerCell.textContent = '-';
+                headerCell.style.display = 'none';
+
+                document.getElementById(`temp${i}`).textContent = '-';
+                document.getElementById(`feels${i}`).textContent = '-';
+                document.getElementById(`humidity${i}`).textContent = '-';
+                document.getElementById(`wind${i}`).textContent = '-';
+                document.getElementById(`pressure${i}`).textContent = '-';
+                document.getElementById(`visibility${i}`).textContent = '-';
+            }
+        }
+    }
+
+    // Get weather icon
+    function getWeatherIcon(iconCode) {
+        const iconMap = {
+            '01d': 'fas fa-sun text-warning',
+            '01n': 'fas fa-moon text-secondary',
+            '02d': 'fas fa-cloud-sun text-warning',
+            '02n': 'fas fa-cloud-moon text-secondary',
+            '03d': 'fas fa-cloud text-secondary',
+            '03n': 'fas fa-cloud text-secondary',
+            '04d': 'fas fa-cloud text-dark',
+            '04n': 'fas fa-cloud text-dark',
+            '09d': 'fas fa-cloud-rain text-primary',
+            '09n': 'fas fa-cloud-rain text-primary',
+            '10d': 'fas fa-cloud-sun-rain text-primary',
+            '10n': 'fas fa-cloud-moon-rain text-primary',
+            '11d': 'fas fa-bolt text-warning',
+            '11n': 'fas fa-bolt text-warning',
+            '13d': 'fas fa-snowflake text-info',
+            '13n': 'fas fa-snowflake text-info',
+            '50d': 'fas fa-smog text-secondary',
+            '50n': 'fas fa-smog text-secondary'
+        };
+        return iconMap[iconCode] || 'fas fa-cloud text-secondary';
+    }
+
+    // Event listeners
+    document.getElementById('citySearchInput').addEventListener('input', searchCities);
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#citySearchInput') && !e.target.closest('#searchResults')) {
+            hideSearchResults();
+        }
+    });
+
+    // Initialize
+    updateVisibility();
+</script>
+<!-- Add Leaflet JS before closing </body> -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+let map, marker;
+function openMapModal() {
+    const modal = new bootstrap.Modal(document.getElementById('mapModal'));
+    modal.show();
+    setTimeout(() => {
+        if (!map) {
+            map = L.map('leafletMap').setView([20, 0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+            map.on('click', onMapClick);
+        } else {
+            map.invalidateSize();
+        }
+    }, 300);
+}
+function onMapClick(e) {
+    if (marker) {
+        marker.setLatLng(e.latlng);
+    } else {
+        marker = L.marker(e.latlng).addTo(map);
+    }
+    fetch(`https://nominatim.openstreetmap.org/reverse?lat=${e.latlng.lat}&lon=${e.latlng.lng}&format=json`)
+        .then(res => res.json())
+        .then(data => {
+            let city = data.address.city || data.address.town || data.address.village || data.address.state || '';
+            let country = data.address.country || '';
+            if (city && country) {
+                addCityToComparison(city, country);
+                bootstrap.Modal.getInstance(document.getElementById('mapModal')).hide();
+            } else {
+                alert('Could not determine city. Please try another location.');
+            }
+        })
+        .catch(() => alert('Failed to get location details.'));
+}
+</script>
+</body>
+</html>
